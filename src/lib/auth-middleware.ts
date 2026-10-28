@@ -12,6 +12,7 @@ export const requireAuth = createMiddleware({ type: "function" }).server(async (
 export const requireAdmin = createMiddleware({ type: "function" })
   .middleware([requireAuth])
   .server(async ({ next, context }) => {
-    if (!context.user.isAdmin) throw new Error("Only admins can do this.");
+    if (context.user.role !== "admin")
+      throw new Error("Only administrators can perform this action.");
     return next();
   });

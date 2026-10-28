@@ -69,7 +69,12 @@
   --tone-2: oklch(0.68 0.19 35);
   --tone-3: oklch(0.62 0.17 155);
   --tone-4: oklch(0.6 0.2 330);
-  --gradient-sidebar: linear-gradient(170deg, oklch(0.3 0.1 255), oklch(0.36 0.12 210) 60%, oklch(0.45 0.13 185));
+  --gradient-sidebar: linear-gradient(
+    170deg,
+    oklch(0.3 0.1 255),
+    oklch(0.36 0.12 210) 60%,
+    oklch(0.45 0.13 185)
+  );
   --gradient-brand: linear-gradient(120deg, var(--tone-1), var(--tone-3));
   --gradient-warm: linear-gradient(120deg, var(--tone-2), var(--tone-4));
   --shadow-card: 0 10px 30px -14px color-mix(in oklab, var(--primary) 35%, transparent);
@@ -82,24 +87,57 @@
   --color-tone-4: var(--tone-4);
 }
 
-@utility bg-gradient-sidebar { background-image: var(--gradient-sidebar); }
-@utility bg-gradient-brand { background-image: var(--gradient-brand); }
-@utility bg-gradient-warm { background-image: var(--gradient-warm); }
-@utility shadow-card { box-shadow: var(--shadow-card); }
+@utility bg-gradient-sidebar {
+  background-image: var(--gradient-sidebar);
+}
+@utility bg-gradient-brand {
+  background-image: var(--gradient-brand);
+}
+@utility bg-gradient-warm {
+  background-image: var(--gradient-warm);
+}
+@utility shadow-card {
+  box-shadow: var(--shadow-card);
+}
 
 @layer base {
-  * { border-color: var(--color-border); }
+  * {
+    border-color: var(--color-border);
+  }
   body {
     background-color: var(--color-background);
     background-image:
-      radial-gradient(60rem 30rem at 100% -10%, color-mix(in oklab, var(--tone-1) 14%, transparent), transparent),
-      radial-gradient(40rem 25rem at -10% 110%, color-mix(in oklab, var(--tone-2) 12%, transparent), transparent);
+      radial-gradient(
+        60rem 30rem at 100% -10%,
+        color-mix(in oklab, var(--tone-1) 14%, transparent),
+        transparent
+      ),
+      radial-gradient(
+        40rem 25rem at -10% 110%,
+        color-mix(in oklab, var(--tone-2) 12%, transparent),
+        transparent
+      );
     background-attachment: fixed;
     color: var(--color-foreground);
     font-family: var(--font-sans);
   }
-  h1, h2, h3 { font-family: var(--font-display); letter-spacing: -0.02em; }
-  main h1 { background-image: var(--gradient-brand); -webkit-background-clip: text; background-clip: text; color: transparent; }
-  main table thead { background: color-mix(in oklab, var(--tone-1) 10%, transparent); }
-  main .bg-card, main [data-slot="card"] { box-shadow: var(--shadow-card); }
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+  }
+  main h1 {
+    background-image: var(--gradient-brand);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  main table thead {
+    background: color-mix(in oklab, var(--tone-1) 10%, transparent);
+  }
+  main .bg-card,
+  main [data-slot="card"] {
+    box-shadow: var(--shadow-card);
+  }
 }

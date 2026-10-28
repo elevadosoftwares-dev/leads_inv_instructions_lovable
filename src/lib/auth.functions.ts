@@ -2,16 +2,32 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireAuth } from "@/lib/auth-middleware";
 
-const email = z.string().trim().toLowerCase().email("Enter a valid email address.").max(320);
-const password = z.string().min(8, "Password must be at least 8 characters.").max(100);
+export type AppRole = "admin" | "user";
 
-export const getSession = createServerFn({ method: "GET" }).handler(async () => {
-  const { getSessionUser } = await import("@/server/auth.server");
-  return getSessionUser();
-});
+export interface SessionInfo {
+  id: string;
+  email: string;
+  fullName: string;
+  role: AppRole;
+}
+
+/** The signed-in user, or null when nobody is signed in. */
+export const getSession = createServerFn({ method: "GET" }).handler(
+  async (): Promise<SessionInfo | null> => {
+    const { getSessionUser } = await import("@/server/auth.server");
+    const user = await getSessionUser();
+    return user
+      ? { id: user.userId, email: user.email, fullName: user.fullName, role: user.role }
+      : null;
+  },
+);
 
 export const signIn = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => z.object({ email, password: z.string().min(1) }).parse(d))
+  .inputValidator((d: unknown) =>
+    z
+      .object({ email: z.string().trim().toLowerCase().min(1), password: z.string().min(1) })
+      .parse(d),
+  )
   .handler(async ({ data }) => {
     const { request, sql } = await import("@/server/db.server");
     const { verifyPassword, getDummyHash } = await import("@/server/crypto.server");
@@ -31,38 +47,35 @@ export const signIn = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-/** Self sign-up. The very first account becomes admin; everyone after that is a plain user. */
+const signUpSchema = z.object({
+  email: z.string().trim().toLowerCase().email("Enter a valid email address."),
+  password: z.string().min(8, "Password must be at least 8 characters."),
+  fullName: z.string().trim().max(100),
+});
+
+/** Registers a read-only account. The first account on an empty database becomes an administrator. */
 export const signUp = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
-    z.object({ email, password, full_name: z.string().trim().max(100) }).parse(d),
-  )
+  .inputValidator((d: unknown) => signUpSchema.parse(d))
   .handler(async ({ data }) => {
     const { request, sql, isDuplicateKeyError } = await import("@/server/db.server");
     const { hashPassword } = await import("@/server/crypto.server");
-    const { createSession } = await import("@/server/auth.server");
-
     const req = await request();
-    let id: string | undefined;
     try {
-      // The lock hints make the "is there an admin yet?" check and the insert atomic.
-      const { recordset } = await req
+      // The lock hints make the "no admin yet" check and the insert atomic.
+      await req
         .input("email", sql.NVarChar(320), data.email)
+        .input("full_name", sql.NVarChar(200), data.fullName)
         .input("password_hash", sql.NVarChar(256), await hashPassword(data.password))
-        .input("full_name", sql.NVarChar(100), data.full_name || null)
-        .query<{ id: string }>(
-          `INSERT INTO dbo.users (email, password_hash, full_name, role)
-           OUTPUT inserted.id
-           SELECT @email, @password_hash, @full_name,
+        .query(
+          `INSERT INTO dbo.users (email, full_name, password_hash, role)
+           SELECT @email, @full_name, @password_hash,
                   CASE WHEN EXISTS (SELECT 1 FROM dbo.users WITH (UPDLOCK, HOLDLOCK) WHERE role = N'admin')
                        THEN N'user' ELSE N'admin' END`,
         );
-      id = recordset[0]?.id;
     } catch (error) {
-      if (isDuplicateKeyError(error)) throw new Error("A user with this email address has already been registered");
+      if (isDuplicateKeyError(error)) throw new Error("User already registered");
       throw error;
     }
-    if (!id) throw new Error("Could not create account");
-    await createSession(id);
     return { ok: true };
   });
 
@@ -72,27 +85,19 @@ export const signOut = createServerFn({ method: "POST" }).handler(async () => {
   return { ok: true };
 });
 
+/** Lets the signed-in user choose a new password. */
 export const changePassword = createServerFn({ method: "POST" })
   .middleware([requireAuth])
   .inputValidator((d: unknown) =>
-    z.object({ currentPassword: z.string().min(1), newPassword: password }).parse(d),
+    z.object({ password: z.string().min(8, "Password must be at least 8 characters.") }).parse(d),
   )
   .handler(async ({ data, context }) => {
     const { request, sql } = await import("@/server/db.server");
-    const { hashPassword, verifyPassword } = await import("@/server/crypto.server");
-
+    const { hashPassword } = await import("@/server/crypto.server");
     const req = await request();
-    const { recordset } = await req
-      .input("id", sql.UniqueIdentifier, context.user.id)
-      .query<{ password_hash: string }>(`SELECT password_hash FROM dbo.users WHERE id = @id`);
-    const row = recordset[0];
-    if (!row || !(await verifyPassword(data.currentPassword, row.password_hash)))
-      throw new Error("Current password is incorrect");
-
-    const upd = await request();
-    await upd
-      .input("id", sql.UniqueIdentifier, context.user.id)
-      .input("password_hash", sql.NVarChar(256), await hashPassword(data.newPassword))
+    await req
+      .input("id", sql.UniqueIdentifier, context.user.userId)
+      .input("password_hash", sql.NVarChar(256), await hashPassword(data.password))
       .query(`UPDATE dbo.users SET password_hash = @password_hash WHERE id = @id`);
     return { ok: true };
   });

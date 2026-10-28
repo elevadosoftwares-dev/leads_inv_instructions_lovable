@@ -108,31 +108,16 @@ async function connectAndMigrate(config: sql.config): Promise<sql.ConnectionPool
 async function createDatabaseIfMissing(config: sql.config): Promise<boolean> {
   const master = await new sql.ConnectionPool({ ...config, database: "master" }).connect();
   try {
-    // If the default data/log file names are already taken (e.g. another database owns a
-    // "Leads_QRS.mdf" - file names are case-insensitive on Windows), retry with unique names.
     const { recordset } = await master
       .request()
       .input("name", sql.NVarChar(128), config.database)
-      .input("suffix", sql.NVarChar(20), new Date().toISOString().replace(/\D/g, "").slice(0, 14))
       .query<{ created: number }>(
         `IF DB_ID(@name) IS NOT NULL
            SELECT 0 AS created;
          ELSE
          BEGIN
-           DECLARE @stmt NVARCHAR(2000) = N'CREATE DATABASE ' + QUOTENAME(@name);
-           BEGIN TRY
-             EXEC (@stmt);
-           END TRY
-           BEGIN CATCH
-             IF ERROR_NUMBER() NOT IN (1802, 5170) THROW;
-             DECLARE @data NVARCHAR(400) = CAST(SERVERPROPERTY('InstanceDefaultDataPath') AS NVARCHAR(400));
-             DECLARE @log  NVARCHAR(400) = CAST(SERVERPROPERTY('InstanceDefaultLogPath') AS NVARCHAR(400));
-             DECLARE @file NVARCHAR(200) = @name + N'_' + @suffix;
-             SET @stmt = @stmt
-               + N' ON (NAME = ' + QUOTENAME(@name) + N', FILENAME = ' + QUOTENAME(@data + @file + N'.mdf', '''') + N')'
-               + N' LOG ON (NAME = ' + QUOTENAME(@name + N'_log') + N', FILENAME = ' + QUOTENAME(@log + @file + N'_log.ldf', '''') + N')';
-             EXEC (@stmt);
-           END CATCH
+           DECLARE @stmt NVARCHAR(400) = N'CREATE DATABASE ' + QUOTENAME(@name);
+           EXEC (@stmt);
            SELECT 1 AS created;
          END`,
       );
@@ -152,16 +137,4 @@ export async function request(): Promise<sql.Request> {
 export function isDuplicateKeyError(error: unknown): boolean {
   const number = (error as { number?: number } | null)?.number;
   return number === 2627 || number === 2601;
-}
-
-/** SQL Server error 547: a row is still referenced by a foreign key (or a CHECK failed). */
-export function isReferenceError(error: unknown): boolean {
-  return (error as { number?: number } | null)?.number === 547;
-}
-
-/** SQL Server returns GUIDs in upper case; the app compares them in lower case. */
-export function lowerId(id: string): string;
-export function lowerId(id: string | null): string | null;
-export function lowerId(id: string | null): string | null {
-  return id === null ? null : id.toLowerCase();
 }

@@ -4,15 +4,17 @@ import { deleteCookie, getCookie, setCookie } from "@tanstack/react-start/server
 import { request, sql } from "./db.server";
 import { newSessionToken, sha256Hex } from "./crypto.server";
 
-const COOKIE_NAME = "ii_session";
+const COOKIE_NAME = "inv_session";
 const SESSION_DAYS = 30;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+export type AppRole = "admin" | "user";
+
 export type SessionUser = {
-  id: string;
+  userId: string;
   email: string;
-  fullName: string | null;
-  isAdmin: boolean;
+  fullName: string;
+  role: AppRole;
 };
 
 function cookieOptions(expires: Date) {
@@ -51,8 +53,8 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   const { recordset } = await req.input("token_hash", sql.Char(64), tokenHash).query<{
     id: string;
     email: string;
-    full_name: string | null;
-    role: string;
+    full_name: string;
+    role: AppRole;
     expires_at: Date;
   }>(
     `SELECT u.id, u.email, u.full_name, u.role, s.expires_at
@@ -73,10 +75,10 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   }
 
   return {
-    id: row.id.toLowerCase(),
+    userId: row.id.toLowerCase(),
     email: row.email,
     fullName: row.full_name,
-    isAdmin: row.role === "admin",
+    role: row.role,
   };
 }
 
